@@ -1,9 +1,8 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { categories } from "@/lib/shop";
-import { BagIcon, HeartIcon, SearchIcon, UserIcon } from "./icons";
-
-const iconLink =
-  "grid h-10 w-10 place-items-center rounded-full text-green-900 hover:bg-green-50";
+import { SearchIcon } from "./icons";
+import { AccountLinks, AccountNav } from "./AccountNav";
 
 export default function Header() {
   return (
@@ -32,23 +31,9 @@ export default function Header() {
           </button>
         </form>
 
-        <nav className="ml-auto flex items-center gap-1 md:ml-0" aria-label="Account">
-          <Link href="/coming-soon" className="hidden rounded-full px-3 py-2 text-sm font-medium hover:bg-green-50 lg:block">
-            Sell on Grown Nearby
-          </Link>
-          <Link href="/coming-soon" className="hidden rounded-full px-3 py-2 text-sm font-medium hover:bg-green-50 md:block">
-            Sign in
-          </Link>
-          <Link href="/coming-soon" aria-label="Favourites" className={iconLink}>
-            <HeartIcon />
-          </Link>
-          <Link href="/coming-soon" aria-label="Sign in" className={`${iconLink} md:hidden`}>
-            <UserIcon />
-          </Link>
-          <Link href="/coming-soon" aria-label="Basket" className={iconLink}>
-            <BagIcon />
-          </Link>
-        </nav>
+        <Suspense fallback={<AccountLinks signedIn={false} />}>
+          <AccountNav />
+        </Suspense>
       </div>
 
       <nav aria-label="Categories" className="border-t border-green-100">

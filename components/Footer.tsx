@@ -29,7 +29,7 @@ export default function Footer() {
           <div>
             <h2 className="mb-3 font-bold">Sell</h2>
             <ul className={col}>
-              <li><Link href="/coming-soon" className={link}>Sell on Grown Nearby</Link></li>
+              <li><Link href="/sell" className={link}>Sell on Grown Nearby</Link></li>
               <li><Link href="/coming-soon" className={link}>Seller guide</Link></li>
               <li><Link href="/coming-soon" className={link}>Delivery and collection</Link></li>
             </ul>
