@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useRef, useState } from "react";
-import { createShop, lookupAddresses, type ShopState } from "@/app/sell/actions";
+import { createShop, type ShopState } from "@/app/sell/actions";
 
 const field =
   "w-full rounded-xl border-2 border-green-200 bg-white px-4 py-3 text-base focus:border-green-600 focus:outline-none";
@@ -20,8 +20,6 @@ const TITLES = [
 const norm = (s: string) => s.toUpperCase().replace(/\s+/g, "");
 const BIRMINGHAM = /^B[0-9]{1,2}[A-Z]?[0-9][A-Z]{2}$/;
 
-type Lookup = { postcode: string; addresses: string[]; manual: boolean };
-
 export default function SellerWizard() {
   const [state, formAction, pending] = useActionState<ShopState, FormData>(createShop, {});
   const formRef = useRef<HTMLFormElement>(null);
@@ -32,33 +30,7 @@ export default function SellerWizard() {
   const [delivery, setDelivery] = useState(false);
   const [courier, setCourier] = useState(false);
 
-  const [postcode, setPostcode] = useState("");
-  const [lookup, setLookup] = useState<Lookup | null>(null);
-  const [looking, setLooking] = useState(false);
-  const [address, setAddress] = useState("");
-  const [manual, setManual] = useState(false);
   const [review, setReview] = useState<[string, string][]>([]);
-
-  const verified = lookup !== null && norm(lookup.postcode) === norm(postcode);
-
-  async function findAddresses() {
-    setError("");
-    if (!BIRMINGHAM.test(norm(postcode))) {
-      setError("Please enter a Birmingham postcode, for example B14 7AA.");
-      return;
-    }
-    setLooking(true);
-    const r = await lookupAddresses(postcode);
-    setLooking(false);
-    if (!r.ok) {
-      setLookup(null);
-      setError(r.error);
-      return;
-    }
-    setLookup({ postcode: r.postcode, addresses: r.addresses, manual: r.manual });
-    setAddress("");
-    setManual(r.manual);
-  }
 
   function validate(s: number): string {
     const fd = new FormData(formRef.current!);
@@ -69,8 +41,8 @@ export default function SellerWizard() {
       if (str("description").length > 500) return "Please keep the description under 500 characters.";
     }
     if (s === 1) {
-      if (!verified) return "Enter your postcode and press “Find my address”.";
-      if (address.trim().length < 5) return "Please choose or enter your address.";
+      if (!BIRMINGHAM.test(norm(str("postcode")))) return "Please enter a Birmingham postcode, for example B14 7AA.";
+      if (str("address_line1").length < 3) return "Please enter your house number and street.";
     }
     if (s === 2) {
       if (!collection && !delivery && !courier) return "Choose at least one way for buyers to get your food.";
@@ -91,8 +63,11 @@ export default function SellerWizard() {
     const money = (k: string) => `£${Number(s(k) || 0).toFixed(2)}`;
     const rows: [string, string][] = [["Shop name", s("name")]];
     if (s("description")) rows.push(["About", s("description")]);
-    rows.push(["Public area", `Birmingham ${(lookup?.postcode ?? postcode).split(" ")[0]}`]);
-    rows.push(["Private address", `${address}, ${lookup?.postcode ?? postcode}`]);
+    const pc = norm(s("postcode"));
+    const pcPretty = `${pc.slice(0, -3)} ${pc.slice(-3)}`;
+    const addr = [s("address_line1"), s("address_line2"), "Birmingham"].filter(Boolean).join(", ");
+    rows.push(["Public area", `Birmingham ${pcPretty.split(" ")[0]}`]);
+    rows.push(["Private address", `${addr}, ${pcPretty}`]);
     if (fd.get("collection")) rows.push(["Collection", s("collection_notes") || "Free"]);
     if (fd.get("delivery")) {
       rows.push(["Delivered by you", `${money("delivery_fee")}${s("delivery_notes") ? ` · ${s("delivery_notes")}` : ""}`]);
@@ -139,7 +114,7 @@ export default function SellerWizard() {
         // Enter moves to the next step instead of submitting early
         if (e.key === "Enter" && step < 3 && (e.target as HTMLElement).tagName === "INPUT") {
           e.preventDefault();
-          if (!(e.target as HTMLElement).closest("[data-lookup]")) next();
+          next();
         }
       }}
     >
@@ -171,74 +146,24 @@ export default function SellerWizard() {
         <p className="text-green-900/80">
           Your full address stays private. Buyers only see the general area, for example B14.
         </p>
-        <div data-lookup>
-          <label htmlFor="postcode" className={label}>Postcode</label>
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <input
-              id="postcode"
-              name="postcode"
-              value={postcode}
-              onChange={(e) => {
-                setPostcode(e.target.value);
-                setLookup(null);
-                setAddress("");
-                setManual(false);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  void findAddresses();
-                }
-              }}
-              autoComplete="postal-code"
-              className={`${field} sm:max-w-xs`}
-              placeholder="B14 7AA"
-            />
-            <button type="button" onClick={findAddresses} disabled={looking} className={ghost}>
-              {looking ? "Looking…" : "Find my address"}
-            </button>
+        <div>
+          <label htmlFor="address_line1" className={label}>Address line 1</label>
+          <input id="address_line1" name="address_line1" maxLength={100} autoComplete="address-line1" className={field} placeholder="House number and street" />
+        </div>
+        <div>
+          <label htmlFor="address_line2" className={label}>Address line 2 (optional)</label>
+          <input id="address_line2" name="address_line2" maxLength={100} autoComplete="address-line2" className={field} placeholder="Flat, building or area" />
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label htmlFor="city" className={label}>Town or city</label>
+            <input id="city" value="Birmingham" readOnly className={`${field} bg-green-50`} />
+          </div>
+          <div>
+            <label htmlFor="postcode" className={label}>Postcode</label>
+            <input id="postcode" name="postcode" autoComplete="postal-code" className={field} placeholder="B14 7AA" />
           </div>
         </div>
-
-        {verified && lookup && (
-          <div className="space-y-3">
-            {!manual && lookup.addresses.length > 0 && (
-              <div>
-                <label htmlFor="address_select" className={label}>Select your address</label>
-                <select id="address_select" value={address} onChange={(e) => setAddress(e.target.value)} className={field}>
-                  <option value="">Choose from {lookup.addresses.length} addresses…</option>
-                  {lookup.addresses.map((a) => (
-                    <option key={a} value={a}>{a}</option>
-                  ))}
-                </select>
-                <button type="button" onClick={() => { setManual(true); setAddress(""); }} className="mt-2 text-sm font-semibold text-green-700 underline">
-                  I can’t see my address
-                </button>
-              </div>
-            )}
-            {manual && (
-              <div>
-                <label htmlFor="address_manual" className={label}>Your address</label>
-                <input
-                  id="address_manual"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  maxLength={200}
-                  autoComplete="street-address"
-                  className={field}
-                  placeholder="House number and street"
-                />
-                {lookup.manual && (
-                  <p className="mt-1 text-sm text-green-900/70">
-                    Postcode confirmed. Please type your house number and street.
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-        <input type="hidden" name="address" value={address} />
       </div>
 
       {/* Step 4 of 5: delivery */}

@@ -5,6 +5,7 @@ import { connection } from "next/server";
 import { createClient } from "@/lib/auth/server";
 import { signOut } from "@/app/auth/actions";
 import { describeOption, type DeliveryOption } from "@/lib/shop";
+import AddressForm from "@/components/AddressForm";
 
 export const metadata: Metadata = { title: "My account – Grown Nearby" };
 
@@ -119,6 +120,13 @@ async function DashboardContent() {
               <h2 className="text-lg font-bold">Your private address</h2>
               <p className="mt-1 break-words">{priv.address}, {priv.postcode}</p>
               <p className="mt-1 text-sm text-green-900/70">Only you can see this. Buyers see just “{shop.area}”.</p>
+              <details className="mt-4">
+                <summary className="cursor-pointer font-semibold text-green-700 underline">Edit address</summary>
+                <AddressForm
+                  defaultAddress={priv.address.replace(/,\s*Birmingham$/i, "")}
+                  defaultPostcode={priv.postcode}
+                />
+              </details>
             </section>
           )}
 

@@ -1,13 +1,11 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/auth/server";
 
 export type ShopState = { error?: string };
-
-export type LookupResult =
-  | { ok: true; postcode: string; addresses: string[]; manual: boolean }
-  | { ok: false; error: string };
+export type AddressState = { error?: string; message?: string };
 
 type Option = { method: string; fee_pence: number; courier?: string; notes: string };
 
@@ -54,53 +52,6 @@ async function checkArea(pc: string): Promise<{ ok: true } | { ok: false; error:
   return { ok: true };
 }
 
-function formatAddress(a: unknown): string | null {
-  if (typeof a === "string") {
-    return a.split(",").map((s) => s.trim()).filter(Boolean).join(", ") || null;
-  }
-  if (a && typeof a === "object") {
-    const o = a as Record<string, unknown>;
-    const parts = Array.isArray(o.formatted_address)
-      ? o.formatted_address
-      : [o.line_1, o.line_2, o.line_3, o.line_4, o.town_or_city, o.county];
-    const s = parts
-      .filter((p): p is string => typeof p === "string" && p.trim() !== "")
-      .map((p) => p.trim())
-      .join(", ");
-    return s || null;
-  }
-  return null;
-}
-
-// Step 2 of shop setup: check the postcode and (if an address service is set up) list its addresses
-export async function lookupAddresses(raw: string): Promise<LookupResult> {
-  const supabase = await createClient();
-  const { data } = await supabase.auth.getClaims();
-  if (!data?.claims) return { ok: false, error: "Please sign in first." };
-
-  const pc = tidyPostcode(raw);
-  if (!pc) return { ok: false, error: "That doesn’t look like a UK postcode." };
-
-  const area = await checkArea(pc);
-  if (!area.ok) return area;
-
-  // Full address lists come from a paid service. Without a key, the seller types their address.
-  const key = process.env.ADDRESS_API_KEY;
-  if (!key) return { ok: true, postcode: pc, addresses: [], manual: true };
-
-  try {
-    const url = `https://api.getaddress.io/find/${encodeURIComponent(pc.replace(" ", ""))}?api-key=${encodeURIComponent(key)}&expand=true`;
-    const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(8000) });
-    if (!res.ok) return { ok: true, postcode: pc, addresses: [], manual: true };
-    const json = await res.json();
-    const list: unknown[] = Array.isArray(json?.addresses) ? json.addresses : [];
-    const addresses = list.map(formatAddress).filter((a): a is string => Boolean(a));
-    return { ok: true, postcode: pc, addresses, manual: addresses.length === 0 };
-  } catch {
-    return { ok: true, postcode: pc, addresses: [], manual: true };
-  }
-}
-
 export async function createShop(_prev: ShopState, formData: FormData): Promise<ShopState> {
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
@@ -108,12 +59,14 @@ export async function createShop(_prev: ShopState, formData: FormData): Promise<
 
   const name = text(formData, "name");
   const description = text(formData, "description");
-  const address = text(formData, "address");
+  const line1 = text(formData, "address_line1");
+  const line2 = text(formData, "address_line2");
   const pc = tidyPostcode(text(formData, "postcode"));
 
   if (name.length < 3 || name.length > 60) return { error: "Your shop name needs to be 3 to 60 characters." };
   if (description.length > 500) return { error: "Please keep the description under 500 characters." };
-  if (address.length < 5 || address.length > 200) return { error: "Please enter your address (it stays private)." };
+  if (line1.length < 3 || line1.length > 100) return { error: "Please enter your house number and street." };
+  if (line2.length > 100) return { error: "Address line 2 is too long." };
   if (!pc) return { error: "Please enter a valid postcode." };
   if (!formData.get("confirm_food")) {
     return { error: "Please confirm your food business registration to open your shop." };
@@ -121,6 +74,8 @@ export async function createShop(_prev: ShopState, formData: FormData): Promise<
 
   const area = await checkArea(pc);
   if (!area.ok) return { error: area.error };
+
+  const address = [line1, line2, "Birmingham"].filter(Boolean).join(", ");
 
   const options: Option[] = [];
 
@@ -157,4 +112,31 @@ export async function createShop(_prev: ShopState, formData: FormData): Promise<
   }
 
   redirect("/dashboard");
+}
+
+// Lets a seller change their private address and postcode later (the public area updates with it)
+export async function updateAddress(_prev: AddressState, formData: FormData): Promise<AddressState> {
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getClaims();
+  if (!data?.claims) return { error: "Please sign in first." };
+
+  const address = text(formData, "address");
+  const pc = tidyPostcode(text(formData, "postcode"));
+
+  if (address.length < 5 || address.length > 200) return { error: "Please enter your house number and street." };
+  if (!pc) return { error: "Please enter a valid postcode." };
+
+  const area = await checkArea(pc);
+  if (!area.ok) return { error: area.error };
+
+  const full = /,\s*Birmingham$/i.test(address) ? address : `${address}, Birmingham`;
+
+  const { error } = await supabase.rpc("update_shop_address", { p_address: full, p_postcode: pc });
+  if (error) {
+    if (error.code === "P0001") return { error: error.message };
+    return { error: "We couldn’t save your address. Please try again." };
+  }
+
+  revalidatePath("/dashboard");
+  return { message: "Address updated." };
 }
