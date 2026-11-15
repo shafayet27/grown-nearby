@@ -4,7 +4,8 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import { createClient } from "@/lib/auth/server";
 import { signOut } from "@/app/auth/actions";
-import { describeOption, type DeliveryOption } from "@/lib/shop";
+import { categoryEmoji, describeOption, pounds, type DeliveryOption } from "@/lib/shop";
+import { statusChip } from "@/lib/listing";
 import AddressForm from "@/components/AddressForm";
 
 export const metadata: Metadata = { title: "My account – Grown Nearby" };
@@ -29,6 +30,18 @@ type Shop = {
   description: string | null;
   area: string;
   delivery_options: DeliveryOption[];
+};
+
+type ListingRow = {
+  id: string;
+  title: string;
+  price_pence: number;
+  unit: string;
+  category: string;
+  status: string;
+  active: boolean;
+  review_note: string | null;
+  listing_images: { url: string; position: number }[];
 };
 
 async function DashboardContent() {
@@ -61,6 +74,16 @@ async function DashboardContent() {
     ? await supabase.from("shop_private").select("address,postcode").eq("shop_id", shop.id).maybeSingle()
     : { data: null };
 
+  const { data: listingData } = shop
+    ? await supabase
+        .from("listings")
+        .select("id,title,price_pence,unit,category,status,active,review_note,listing_images(url,position)")
+        .eq("shop_id", shop.id)
+        .order("created_at", { ascending: false })
+    : { data: null };
+  const myListings = (listingData ?? []) as unknown as ListingRow[];
+  const { data: isAdmin } = await supabase.rpc("is_admin");
+
   return (
     <main className="mx-auto max-w-3xl px-4 py-8 sm:py-12">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -77,6 +100,12 @@ async function DashboardContent() {
           </button>
         </form>
       </div>
+
+      {isAdmin && (
+        <p className="mt-4">
+          <Link href="/admin" className="font-semibold text-green-700 underline">Review listings (admin)</Link>
+        </p>
+      )}
 
       {!shop ? (
         <section className="mt-8 rounded-2xl bg-green-50 p-6">
@@ -130,9 +159,50 @@ async function DashboardContent() {
             </section>
           )}
 
-          <section className="rounded-2xl border border-dashed border-green-300 p-5 text-green-900/80">
-            <h2 className="text-lg font-bold text-green-900">Add listings</h2>
-            <p className="mt-1">Adding listings and photos comes in the next step (Stage 2b).</p>
+          <section className="rounded-2xl border border-green-100 p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-lg font-bold">My listings</h2>
+              <Link
+                href="/dashboard/listings/new"
+                className="rounded-full bg-green-700 px-5 py-2.5 font-semibold text-white hover:bg-green-800"
+              >
+                Add a listing
+              </Link>
+            </div>
+            {myListings.length === 0 ? (
+              <p className="mt-3 text-green-900/80">
+                You haven’t added any listings yet. Add your first one, then our team will check it before it appears in the shop.
+              </p>
+            ) : (
+              <ul className="mt-4 divide-y divide-green-100">
+                {myListings.map((l) => {
+                  const chip = statusChip(l);
+                  const photo = [...(l.listing_images ?? [])].sort((a, b) => a.position - b.position)[0];
+                  return (
+                    <li key={l.id}>
+                      <Link href={`/dashboard/listings/${l.id}`} className="flex items-center gap-3 py-3 hover:bg-green-50 sm:gap-4">
+                        <span className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-xl bg-green-50 text-3xl">
+                          {photo ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={photo.url} alt="" loading="lazy" className="h-full w-full object-cover" />
+                          ) : (
+                            categoryEmoji[l.category] ?? "🧺"
+                          )}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-semibold">{l.title}</span>
+                          <span className="block text-sm text-green-900/70">{pounds(l.price_pence)} {l.unit}</span>
+                          {l.status === "rejected" && l.review_note && (
+                            <span className="block truncate text-sm text-red-700">{l.review_note}</span>
+                          )}
+                        </span>
+                        <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${chip.cls}`}>{chip.text}</span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </section>
         </div>
       )}

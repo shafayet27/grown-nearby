@@ -27,7 +27,8 @@ export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname;
 
   // Only these pages need a login. /sell and /sell/signup stay public.
-  const needsLogin = path.startsWith("/sell/setup") || path.startsWith("/dashboard");
+  const needsLogin =
+    path.startsWith("/sell/setup") || path.startsWith("/dashboard") || path.startsWith("/admin");
 
   if (!signedIn && needsLogin) {
     const url = request.nextUrl.clone();

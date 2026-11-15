@@ -10,6 +10,7 @@ export type CardListing = {
   price_pence: number;
   unit: string;
   is_organic: boolean;
+  organic_verified: boolean;
   is_perishable: boolean;
   shops: { name: string; delivery_options: { method: string }[] };
   listing_images: { url: string; position: number }[];
@@ -28,7 +29,7 @@ export default function ListingCard({ l }: { l: CardListing }) {
           ) : (
             <div className="grid h-full place-items-center text-7xl">{categoryEmoji[l.category] ?? "🧺"}</div>
           )}
-          {l.is_organic && (
+          {l.organic_verified && (
             <span className="absolute bottom-2 left-2 rounded-full bg-white/95 px-2.5 py-0.5 text-xs font-semibold text-green-800">
               Certified organic
             </span>

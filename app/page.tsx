@@ -27,11 +27,12 @@ async function HomeContent({ searchParams }: { searchParams: SearchParams }) {
     .from("listings")
     .select(CARD_SELECT)
     .eq("active", true)
+    .eq("status", "approved")
     .order("created_at", { ascending: false });
 
   if (q) query = query.ilike("title", `%${q.replace(/[%,]/g, "")}%`);
   if (cat && categories.includes(cat)) query = query.eq("category", cat);
-  if (organic === "1") query = query.eq("is_organic", true);
+  if (organic === "1") query = query.eq("organic_verified", true);
 
   const { data, error } = await query;
   const listings = (data ?? []) as unknown as CardListing[];

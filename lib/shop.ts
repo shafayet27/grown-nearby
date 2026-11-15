@@ -44,5 +44,5 @@ export function deliveryLabels(options: { method: string }[], perishable: boolea
 
 // Fields needed to draw a listing card (used by the home page and "more from this shop")
 export const CARD_SELECT =
-  "id,title,category,price_pence,unit,is_organic,is_perishable," +
+  "id,title,category,price_pence,unit,is_organic,organic_verified,is_perishable," +
   "shops(name,delivery_options(method)),listing_images(url,position)";

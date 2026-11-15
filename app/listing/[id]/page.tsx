@@ -22,6 +22,7 @@ type Listing = {
   price_pence: number;
   unit: string;
   is_organic: boolean;
+  organic_verified: boolean;
   organic_cert_ref: string | null;
   is_perishable: boolean;
   allergens: string | null;
@@ -51,11 +52,12 @@ async function ListingContent({ params }: { params: Params }) {
   const { data, error } = await supabase
     .from("listings")
     .select(
-      "id,shop_id,title,description,category,price_pence,unit,is_organic,organic_cert_ref,is_perishable,allergens," +
+      "id,shop_id,title,description,category,price_pence,unit,is_organic,organic_verified,organic_cert_ref,is_perishable,allergens," +
         "shops(name,description,delivery_options(id,method,fee_pence,courier,notes)),listing_images(url,position)"
     )
     .eq("id", id)
     .eq("active", true)
+    .eq("status", "approved")
     .maybeSingle();
 
   if (error || !data) notFound();
@@ -72,6 +74,7 @@ async function ListingContent({ params }: { params: Params }) {
     .eq("shop_id", l.shop_id)
     .neq("id", l.id)
     .eq("active", true)
+    .eq("status", "approved")
     .limit(4);
   const more = (moreData ?? []) as unknown as CardListing[];
 
@@ -99,7 +102,7 @@ async function ListingContent({ params }: { params: Params }) {
           </p>
 
           <div className="flex flex-wrap gap-2">
-            {l.is_organic && (
+            {l.organic_verified && (
               <span className="rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-800">
                 Certified organic
               </span>
@@ -155,7 +158,7 @@ async function ListingContent({ params }: { params: Params }) {
               <dd>{l.allergens || "Not provided"}</dd>
               <dt className="font-semibold">Storage</dt>
               <dd>{l.is_perishable ? "Fresh. Keep cool and use soon." : "Ambient. Store in a cool, dry place."}</dd>
-              {l.is_organic && (
+              {l.organic_verified && (
                 <>
                   <dt className="font-semibold">Organic</dt>
                   <dd>Certificate on file{l.organic_cert_ref ? ` (${l.organic_cert_ref})` : ""}</dd>
