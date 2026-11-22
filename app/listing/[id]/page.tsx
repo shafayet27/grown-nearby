@@ -11,6 +11,7 @@ import {
   type DeliveryOption,
 } from "@/lib/shop";
 import Gallery from "@/components/Gallery";
+import AddToBasket from "@/components/AddToBasket";
 import ListingCard, { type CardListing } from "@/components/ListingCard";
 
 type Listing = {
@@ -138,12 +139,7 @@ async function ListingContent({ params }: { params: Params }) {
             )}
           </div>
 
-          <button
-            disabled
-            className="w-full cursor-not-allowed rounded-full bg-green-700/50 px-5 py-3.5 font-semibold text-white"
-          >
-            Add to basket (coming in a later stage)
-          </button>
+          <AddToBasket listingId={l.id} />
         </section>
 
         {/* 3. Details */}

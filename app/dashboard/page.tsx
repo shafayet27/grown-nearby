@@ -82,6 +82,13 @@ async function DashboardContent() {
         .order("created_at", { ascending: false })
     : { data: null };
   const myListings = (listingData ?? []) as unknown as ListingRow[];
+  const { count: newOrders } = shop
+    ? await supabase
+        .from("orders")
+        .select("id", { count: "exact", head: true })
+        .eq("shop_id", shop.id)
+        .eq("status", "placed")
+    : { count: 0 };
   const { data: isAdmin } = await supabase.rpc("is_admin");
 
   return (
@@ -106,6 +113,23 @@ async function DashboardContent() {
           <Link href="/admin" className="font-semibold text-green-700 underline">Review listings (admin)</Link>
         </p>
       )}
+
+      <div className="mt-4 flex flex-wrap gap-3">
+        {shop && (
+          <Link
+            href="/dashboard/orders"
+            className="rounded-full bg-green-700 px-5 py-2.5 font-semibold text-white hover:bg-green-800"
+          >
+            Shop orders{newOrders ? ` (${newOrders} new)` : ""}
+          </Link>
+        )}
+        <Link
+          href="/orders"
+          className="rounded-full border-2 border-green-700 px-5 py-2 font-semibold text-green-700 hover:bg-green-50"
+        >
+          My orders
+        </Link>
+      </div>
 
       {!shop ? (
         <section className="mt-8 rounded-2xl bg-green-50 p-6">

@@ -2,7 +2,8 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { createClient } from "@/lib/auth/server";
 import { signOut } from "@/app/auth/actions";
-import { BagIcon, HeartIcon, UserIcon } from "./icons";
+import { HeartIcon, UserIcon } from "./icons";
+import BasketLink from "./BasketLink";
 
 const iconLink = "grid h-10 w-10 place-items-center rounded-full text-green-900 hover:bg-green-50";
 const textLink = "hidden rounded-full px-3 py-2 text-sm font-medium hover:bg-green-50";
@@ -15,9 +16,12 @@ export function AccountLinks({ signedIn }: { signedIn: boolean }) {
         {signedIn ? "My account" : "Sell on Grown Nearby"}
       </Link>
       {signedIn ? (
-        <form action={signOut} className="hidden md:block">
-          <button className="rounded-full px-3 py-2 text-sm font-medium hover:bg-green-50">Sign out</button>
-        </form>
+        <>
+          <Link href="/orders" className={`${textLink} md:block`}>My orders</Link>
+          <form action={signOut} className="hidden md:block">
+            <button className="rounded-full px-3 py-2 text-sm font-medium hover:bg-green-50">Sign out</button>
+          </form>
+        </>
       ) : (
         <Link href="/login" className={`${textLink} md:block`}>Sign in</Link>
       )}
@@ -31,9 +35,7 @@ export function AccountLinks({ signedIn }: { signedIn: boolean }) {
       >
         <UserIcon />
       </Link>
-      <Link href="/coming-soon" aria-label="Basket" className={iconLink}>
-        <BagIcon />
-      </Link>
+      <BasketLink className={iconLink} />
     </nav>
   );
 }
