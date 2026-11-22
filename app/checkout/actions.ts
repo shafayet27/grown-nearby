@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/auth/server";
 import { checkArea, tidyPostcode } from "@/lib/postcode";
+import { startCheckout } from "@/lib/payments";
+import { stripeConfigured } from "@/lib/stripe";
 
 export type PlaceInput = {
   name: string;
@@ -14,15 +16,21 @@ export type PlaceInput = {
   groups: { shop_id: string; method: string; items: { listing_id: string; quantity: number }[] }[];
 };
 
-export type PlaceResult = { error?: string; orderIds?: string[] };
+// On success the browser is sent to this Stripe payment page
+export type PlaceResult = { error?: string; url?: string };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const METHODS = ["collection", "seller_delivery", "courier"];
 
 export async function placeOrders(input: PlaceInput): Promise<PlaceResult> {
+  if (!stripeConfigured()) {
+    return { error: "Payments aren’t switched on yet. Please try again later." };
+  }
+
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
-  if (!data?.claims) return { error: "Please sign in first." };
+  const claims = data?.claims;
+  if (!claims?.sub) return { error: "Please sign in first." };
 
   const name = String(input?.name ?? "").trim();
   const phone = String(input?.phone ?? "").trim();
@@ -64,7 +72,8 @@ export async function placeOrders(input: PlaceInput): Promise<PlaceResult> {
     postcode = pc;
   }
 
-  const { data: ids, error } = await supabase.rpc("place_orders", {
+  // The database re-checks everything with the real prices and creates one order per seller
+  const { data: group, error } = await supabase.rpc("place_orders", {
     p_name: name,
     p_phone: phone,
     p_address: address,
@@ -73,12 +82,18 @@ export async function placeOrders(input: PlaceInput): Promise<PlaceResult> {
     p_groups: groups,
   });
 
-  if (error) {
-    if (error.code === "P0001") return { error: error.message };
+  if (error || !group) {
+    if (error?.code === "P0001") return { error: error.message };
     return { error: "We couldn’t place your order. Please try again." };
   }
 
   revalidatePath("/orders");
-  revalidatePath("/dashboard");
-  return { orderIds: (ids ?? []) as string[] };
+
+  try {
+    const res = await startCheckout(supabase, String(group), claims.sub, claims.email as string | undefined);
+    if (res.url) return { url: res.url };
+    return { error: res.error ?? "We couldn’t start the payment. You can pay from My orders." };
+  } catch {
+    return { error: "We couldn’t reach the payment service. Your order is saved. You can pay from My orders." };
+  }
 }

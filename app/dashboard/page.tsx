@@ -7,10 +7,15 @@ import { signOut } from "@/app/auth/actions";
 import { categoryEmoji, describeOption, pounds, type DeliveryOption } from "@/lib/shop";
 import { statusChip } from "@/lib/listing";
 import AddressForm from "@/components/AddressForm";
+import { openStripeDashboard, startPayoutSetup } from "@/app/dashboard/payouts/actions";
+import { refreshPayoutStatus } from "@/lib/payments";
+import { stripeConfigured, stripeTestMode } from "@/lib/stripe";
 
 export const metadata: Metadata = { title: "My account – Grown Nearby" };
 
-export default function DashboardPage() {
+type SearchParams = Promise<{ payouts?: string; detail?: string }>;
+
+export default function DashboardPage({ searchParams }: { searchParams: SearchParams }) {
   return (
     <Suspense
       fallback={
@@ -19,7 +24,7 @@ export default function DashboardPage() {
         </main>
       }
     >
-      <DashboardContent />
+      <DashboardContent searchParams={searchParams} />
     </Suspense>
   );
 }
@@ -44,8 +49,9 @@ type ListingRow = {
   listing_images: { url: string; position: number }[];
 };
 
-async function DashboardContent() {
+async function DashboardContent({ searchParams }: { searchParams: SearchParams }) {
   await connection();
+  const { payouts: payoutsMessage, detail } = await searchParams;
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
   const claims = data?.claims;
@@ -89,6 +95,25 @@ async function DashboardContent() {
         .eq("shop_id", shop.id)
         .eq("status", "placed")
     : { count: 0 };
+  // Seller payout status (kept in step with Stripe whenever it isn't complete yet)
+  let payouts: { stripe_account_id: string | null; details_submitted: boolean; payouts_enabled: boolean } | null = null;
+  if (shop) {
+    const { data: row } = await supabase
+      .from("shop_payouts")
+      .select("stripe_account_id,details_submitted,payouts_enabled")
+      .eq("shop_id", shop.id)
+      .maybeSingle();
+    payouts = row;
+    if (row?.stripe_account_id && !row.payouts_enabled && stripeConfigured()) {
+      try {
+        payouts = (await refreshPayoutStatus(shop.id)) ?? row;
+      } catch {
+        // Stripe didn't answer: show what we had
+      }
+    }
+  }
+  const { data: settings } = await supabase.from("platform_settings").select("commission_percent").maybeSingle();
+  const commission = settings ? Number(settings.commission_percent) : 10;
   const { data: isAdmin } = await supabase.rpc("is_admin");
 
   return (
@@ -144,6 +169,53 @@ async function DashboardContent() {
         </section>
       ) : (
         <div className="mt-8 space-y-6">
+          {payoutsMessage === "error" && (
+            <p role="alert" className="rounded-xl bg-red-50 p-4 text-red-800">
+              We couldn’t reach the payment service. Please try again in a moment.
+              {stripeTestMode() && detail && (
+                <span className="mt-2 block break-words text-sm">Test mode details: {detail}</span>
+              )}
+            </p>
+          )}
+          {payoutsMessage === "unavailable" && (
+            <p role="alert" className="rounded-xl bg-amber-50 p-4 text-amber-900">
+              Payments aren’t switched on yet on this site.
+            </p>
+          )}
+
+          <section className={`rounded-2xl p-5 ${payouts?.payouts_enabled ? "border border-green-100" : "border-2 border-amber-300 bg-amber-50"}`}>
+            <h2 className="text-lg font-bold">Get paid</h2>
+            {payouts?.payouts_enabled ? (
+              <>
+                <p className="mt-1">Payouts are set up. You’re paid when you mark an order as completed.</p>
+                <form action={openStripeDashboard} className="mt-3">
+                  <button className="rounded-full border-2 border-green-700 px-5 py-2 font-semibold text-green-700 hover:bg-green-100">
+                    Open my Stripe dashboard
+                  </button>
+                </form>
+              </>
+            ) : (
+              <>
+                <p className="mt-1">
+                  {payouts?.stripe_account_id
+                    ? "Your payout set-up isn’t finished yet. Buyers can’t check out with your shop until it is."
+                    : "Set up payouts so buyers can pay you. Buyers can’t check out with your shop until you do."}
+                </p>
+                <p className="mt-1 text-sm text-green-900/80">
+                  Stripe, our payment partner, checks your identity and collects your bank details. We never see them.
+                </p>
+                <form action={startPayoutSetup} className="mt-3">
+                  <button className="w-full rounded-full bg-green-700 px-6 py-3 font-semibold text-white hover:bg-green-800 sm:w-auto">
+                    {payouts?.stripe_account_id ? "Continue payout set-up" : "Set up payouts"}
+                  </button>
+                </form>
+              </>
+            )}
+            <p className="mt-3 text-sm text-green-900/70">
+              Grown Nearby keeps {commission}% of the item price on each order. Delivery fees are all yours.
+            </p>
+          </section>
+
           <section className="rounded-2xl border border-green-100 p-5">
             <h2 className="text-2xl font-bold text-green-800">{shop.name}</h2>
             <p className="text-sm text-green-900/70">Birmingham {shop.area}</p>

@@ -5,10 +5,11 @@ import { connection } from "next/server";
 import { createClient } from "@/lib/auth/server";
 import { ORDER_SELECT, type OrderRow } from "@/lib/orders";
 import OrderCard from "@/components/OrderCard";
+import ClearBasket from "@/components/ClearBasket";
 
 export const metadata: Metadata = { title: "My orders – Grown Nearby" };
 
-type SearchParams = Promise<{ placed?: string }>;
+type SearchParams = Promise<{ placed?: string; payment?: string }>;
 
 export default function OrdersPage({ searchParams }: { searchParams: SearchParams }) {
   return (
@@ -26,7 +27,7 @@ export default function OrdersPage({ searchParams }: { searchParams: SearchParam
 
 async function OrdersContent({ searchParams }: { searchParams: SearchParams }) {
   await connection();
-  const { placed } = await searchParams;
+  const { placed, payment } = await searchParams;
 
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();
@@ -54,8 +55,22 @@ async function OrdersContent({ searchParams }: { searchParams: SearchParams }) {
       <h1 className="text-3xl font-extrabold text-green-900">My orders</h1>
 
       {placed && (
-        <p role="status" className="mt-4 rounded-xl bg-green-100 p-4 text-green-900">
-          {Number(placed) > 1 ? `Your ${placed} orders have been placed.` : "Your order has been placed."} This was a test order, so no payment was taken. The seller will confirm it.
+        <>
+          <ClearBasket />
+          <p role="status" className="mt-4 rounded-xl bg-green-100 p-4 text-green-900">
+            Thank you! Your payment went through.{" "}
+            {Number(placed) > 1 ? `Your ${placed} orders have been sent to the sellers.` : "Your order has been sent to the seller."} They’ll confirm it soon.
+          </p>
+        </>
+      )}
+      {payment === "pending" && (
+        <p role="status" className="mt-4 rounded-xl bg-amber-50 p-4 text-amber-900">
+          We’re still waiting for confirmation of your payment. Refresh this page in a minute. If you were charged, your order will appear below.
+        </p>
+      )}
+      {(payment === "error" || payment === "unavailable") && (
+        <p role="alert" className="mt-4 rounded-xl bg-red-50 p-4 text-red-800">
+          We couldn’t start the payment. Please try again in a moment.
         </p>
       )}
 

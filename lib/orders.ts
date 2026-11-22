@@ -11,6 +11,11 @@ export type OrderRow = {
   number: number;
   status: string;
   payment_status: string;
+  payment_group: string | null;
+  commission_percent: number;
+  commission_pence: number;
+  seller_amount_pence: number;
+  payout_status: string;
   delivery_method: string;
   courier: string | null;
   delivery_fee_pence: number;
@@ -27,7 +32,7 @@ export type OrderRow = {
 };
 
 export const ORDER_SELECT =
-  "id,number,status,payment_status,delivery_method,courier,delivery_fee_pence,subtotal_pence,total_pence," +
+  "id,number,status,payment_status,payment_group,commission_percent,commission_pence,seller_amount_pence,payout_status,delivery_method,courier,delivery_fee_pence,subtotal_pence,total_pence," +
   "buyer_name,buyer_phone,delivery_address,delivery_postcode,note,created_at," +
   "shops(name,area),order_items(id,title,unit,price_pence,quantity)";
 

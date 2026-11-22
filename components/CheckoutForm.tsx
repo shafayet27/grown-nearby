@@ -2,9 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { pounds, availableOptions, describeOption } from "@/lib/shop";
-import { clearBasket } from "@/lib/basket";
 import { useBasketRows } from "@/lib/useBasketRows";
 import { placeOrders } from "@/app/checkout/actions";
 import type { BasketRow } from "@/app/basket/actions";
@@ -13,8 +11,7 @@ const field =
   "w-full rounded-xl border-2 border-green-200 bg-white px-4 py-3 text-base focus:border-green-600 focus:outline-none";
 const label = "mb-1 block font-semibold";
 
-export default function CheckoutForm({ defaultName }: { defaultName: string }) {
-  const router = useRouter();
+export default function CheckoutForm({ defaultName, testMode }: { defaultName: string; testMode: boolean }) {
   const { items, rows, loading } = useBasketRows();
   const [chosen, setChosen] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
@@ -85,20 +82,22 @@ export default function CheckoutForm({ defaultName }: { defaultName: string }) {
       })),
     });
 
-    if (res.error || !res.orderIds) {
+    if (res.error || !res.url) {
       setError(res.error ?? "We couldn’t place your order. Please try again.");
       setSaving(false);
       return;
     }
-    clearBasket();
-    router.push(`/orders?placed=${res.orderIds.length}`);
+    // On to Stripe's secure payment page. The basket is emptied once payment is confirmed.
+    window.location.assign(res.url);
   }
 
   return (
     <form onSubmit={onSubmit} className="space-y-8">
-      <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
-        <strong>Test mode:</strong> no payment is taken and nothing is charged. Sellers see your order for real, so use test details unless you’re testing with a friend.
-      </p>
+      {testMode && (
+        <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
+          <strong>Test mode:</strong> no real money is taken. On the payment page, use the test card 4242 4242 4242 4242 with any future date and any 3-digit code.
+        </p>
+      )}
 
       {plan.map((p) => (
         <section key={p.shop.id} className="rounded-2xl border border-green-100">
@@ -199,7 +198,7 @@ export default function CheckoutForm({ defaultName }: { defaultName: string }) {
           <span>Total to pay</span>
           <span>{pounds(grandTotal)}</span>
         </p>
-        <p className="mt-1 text-sm text-green-900/70">Test order: nothing is charged.</p>
+        <p className="mt-1 text-sm text-green-900/70">You’ll pay securely with Stripe on the next page.</p>
 
         {error && <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-800">{error}</p>}
 
@@ -207,7 +206,7 @@ export default function CheckoutForm({ defaultName }: { defaultName: string }) {
           disabled={saving || blocked}
           className="mt-4 w-full rounded-full bg-green-700 px-6 py-3.5 font-semibold text-white hover:bg-green-800 disabled:opacity-60"
         >
-          {saving ? "Placing your order…" : "Place test order"}
+          {saving ? "Taking you to payment…" : "Continue to payment"}
         </button>
       </div>
     </form>

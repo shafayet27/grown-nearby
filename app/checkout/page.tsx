@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import { createClient } from "@/lib/auth/server";
 import CheckoutForm from "@/components/CheckoutForm";
+import { stripeTestMode } from "@/lib/stripe";
 
 export const metadata: Metadata = { title: "Checkout – Grown Nearby" };
 
@@ -44,7 +45,7 @@ async function CheckoutContent() {
   return (
     <main className="mx-auto max-w-3xl px-4 py-8 sm:py-12">
       <h1 className="mb-6 text-3xl font-extrabold text-green-900">Checkout</h1>
-      <CheckoutForm defaultName={name} />
+      <CheckoutForm defaultName={name} testMode={stripeTestMode()} />
     </main>
   );
 }
