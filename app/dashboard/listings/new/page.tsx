@@ -55,9 +55,9 @@ async function NewListingContent() {
       <Link href="/dashboard" className="text-green-700 underline">← Back to my shop</Link>
       <h1 className="mt-4 text-3xl font-extrabold text-green-900">Add a listing</h1>
       <p className="mt-2 mb-8 text-green-900/80">
-        Fill in the details first, then add photos. Our team checks every listing before it appears in the shop.
+        Add your photos and details, then save. Our team checks every listing before it appears in the shop.
       </p>
-      <ListingForm />
+      <ListingForm userId={userId} />
     </main>
   );
 }

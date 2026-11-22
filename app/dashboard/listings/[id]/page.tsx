@@ -12,7 +12,7 @@ import ListingActions from "@/components/ListingActions";
 export const metadata: Metadata = { title: "Edit listing – Grown Nearby" };
 
 type Params = Promise<{ id: string }>;
-type SearchParams = Promise<{ new?: string }>;
+type SearchParams = Promise<{ new?: string; photoproblem?: string }>;
 
 export default function EditListingPage({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
   return (
@@ -39,7 +39,7 @@ type Row = ListingDefaults & {
 async function EditContent({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
   await connection();
   const { id } = await params;
-  const { new: isNew } = await searchParams;
+  const { new: isNew, photoproblem } = await searchParams;
 
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
@@ -82,7 +82,12 @@ async function EditContent({ params, searchParams }: { params: Params; searchPar
 
       {isNew && (
         <p role="status" className="mt-4 rounded-xl bg-green-100 p-4 text-green-900">
-          Listing saved. Add some photos below. Our team will check it, and it appears in the shop once approved.
+          Listing saved. Our team will check it, and it appears in the shop once approved.
+        </p>
+      )}
+      {photoproblem && (
+        <p role="alert" className="mt-4 rounded-xl bg-amber-50 p-4 text-amber-900">
+          Some photos didn’t upload. You can add them again in the Photos section below.
         </p>
       )}
       {l.status === "pending" && !isNew && (

@@ -3,32 +3,12 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/auth/client";
-import { deleteListingPhoto, saveListingPhoto } from "@/app/dashboard/listings/actions";
-
-const BUCKET = "listing-photos";
-const MAX_PHOTOS = 6;
-const MAX_ORIGINAL_BYTES = 20 * 1024 * 1024;
+import { deleteListingPhoto } from "@/app/dashboard/listings/actions";
+import { MAX_PHOTOS, checkFile, uploadPhotos } from "@/lib/photos";
 
 type Photo = { id: number; url: string; position: number };
 
-// Phone photos are huge. Shrink them in the browser before uploading, so
-// uploads are fast on mobile data and pages load quickly for buyers.
-async function shrink(file: File): Promise<Blob> {
-  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
-  const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
-  const width = Math.round(bitmap.width * scale);
-  const height = Math.round(bitmap.height * scale);
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  canvas.getContext("2d")!.drawImage(bitmap, 0, 0, width, height);
-  bitmap.close();
-  return new Promise((resolve, reject) =>
-    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Could not process the image."))), "image/jpeg", 0.85)
-  );
-}
-
+// Manages the photos of a listing that already exists
 export default function PhotoManager({
   listingId,
   userId,
@@ -40,50 +20,36 @@ export default function PhotoManager({
 }) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
-  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState("");
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
 
   const sorted = [...photos].sort((a, b) => a.position - b.position);
   const room = MAX_PHOTOS - sorted.length;
+  const busy = progress !== "";
 
   async function onPick(files: FileList | null) {
     setError("");
     if (!files || files.length === 0) return;
-    const chosen = Array.from(files).slice(0, room);
-    const skipped = files.length - chosen.length;
 
-    setBusy(true);
-    const supabase = createClient();
-    let problem = skipped > 0 ? `Only ${MAX_PHOTOS} photos fit, so ${skipped} weren’t added.` : "";
+    let problem = "";
+    const usable = Array.from(files).filter((f) => {
+      const msg = checkFile(f);
+      if (msg) problem = msg;
+      return !msg;
+    });
+    const chosen = usable.slice(0, room);
+    if (usable.length > chosen.length) problem = `Only ${MAX_PHOTOS} photos fit, so some weren’t added.`;
 
-    for (const file of chosen) {
-      if (!file.type.startsWith("image/")) {
-        problem = "Please choose image files only.";
-        continue;
-      }
-      if (file.size > MAX_ORIGINAL_BYTES) {
-        problem = "One photo was too large (over 20 MB).";
-        continue;
-      }
-      try {
-        const blob = await shrink(file);
-        const path = `${userId}/${listingId}/${crypto.randomUUID()}.jpg`;
-        const { error: upErr } = await supabase.storage
-          .from(BUCKET)
-          .upload(path, blob, { contentType: "image/jpeg", upsert: false });
-        if (upErr) {
-          problem = "A photo couldn’t be uploaded. Please try again.";
-          continue;
-        }
-        const res = await saveListingPhoto(listingId, path);
-        if (res.error) problem = res.error;
-      } catch {
-        problem = "We couldn’t read one of those photos. Try a JPEG or PNG.";
-      }
+    if (chosen.length > 0) {
+      setProgress("Uploading…");
+      const failed = await uploadPhotos(chosen, listingId, userId, (done, total) =>
+        setProgress(`Uploading photo ${Math.min(done + 1, total)} of ${total}…`)
+      );
+      if (failed) problem = failed;
+      setProgress("");
     }
 
-    setBusy(false);
     setError(problem);
     if (input.current) input.current.value = "";
     router.refresh();
@@ -131,10 +97,10 @@ export default function PhotoManager({
             className={`block cursor-pointer rounded-2xl border-2 border-dashed border-green-300 p-6 text-center hover:bg-green-50 ${busy ? "pointer-events-none opacity-60" : ""}`}
           >
             <span className="block font-semibold text-green-800">
-              {busy ? "Uploading…" : sorted.length === 0 ? "Add photos" : "Add more photos"}
+              {busy ? progress : sorted.length === 0 ? "Add photos" : "Add more photos"}
             </span>
             <span className="mt-1 block text-sm text-green-900/70">
-              Tap to choose or take photos. Up to {room} more. The first one is the main photo.
+              Tap to choose or take photos. You can pick several at once, up to {room} more.
             </span>
           </label>
           <input

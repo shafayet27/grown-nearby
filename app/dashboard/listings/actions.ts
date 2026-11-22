@@ -6,7 +6,7 @@ import { createClient } from "@/lib/auth/server";
 import { categories } from "@/lib/shop";
 import { ALLERGENS, UNITS, buildAllergenText } from "@/lib/listing";
 
-export type ListingState = { error?: string; message?: string };
+export type ListingState = { error?: string; message?: string; id?: string };
 export type PhotoResult = { error?: string };
 
 const BUCKET = "listing-photos";
@@ -100,7 +100,7 @@ export async function createListing(_prev: ListingState, formData: FormData): Pr
   if (error || !row) return { error: "We couldn’t save your listing. Please try again." };
 
   revalidatePath("/dashboard");
-  redirect(`/dashboard/listings/${row.id}?new=1`);
+  return { id: row.id };
 }
 
 export async function updateListing(_prev: ListingState, formData: FormData): Promise<ListingState> {

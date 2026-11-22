@@ -1,9 +1,12 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { createListing, updateListing, type ListingState } from "@/app/dashboard/listings/actions";
 import { categories } from "@/lib/shop";
 import { ALLERGENS, UNITS, parseAllergenText } from "@/lib/listing";
+import { uploadPhotos } from "@/lib/photos";
+import PhotoPicker, { type Staged } from "./PhotoPicker";
 
 const field =
   "w-full rounded-xl border-2 border-green-200 bg-white px-4 py-3 text-base focus:border-green-600 focus:outline-none";
@@ -22,19 +25,78 @@ export type ListingDefaults = {
   organic_cert_ref: string | null;
 };
 
-export default function ListingForm({ listing }: { listing?: ListingDefaults }) {
+// With no `listing`: the "add a listing" page, photos and details on one page.
+// With a `listing`: editing the details (photos are managed separately).
+export default function ListingForm({ listing, userId }: { listing?: ListingDefaults; userId?: string }) {
   const editing = Boolean(listing);
-  const [state, formAction, pending] = useActionState<ListingState, FormData>(
-    editing ? updateListing : createListing,
-    {}
-  );
+  const router = useRouter();
+
+  const [state, formAction, pending] = useActionState<ListingState, FormData>(updateListing, {});
   const parsed = parseAllergenText(listing?.allergens ?? null);
   const [none, setNone] = useState(parsed.none);
   const [organic, setOrganic] = useState(listing?.is_organic ?? false);
 
+  const [staged, setStaged] = useState<Staged[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [progress, setProgress] = useState("");
+  const [error, setError] = useState("");
+  const [photoError, setPhotoError] = useState("");
+
+  async function onCreate(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError("");
+    setPhotoError("");
+
+    if (staged.length === 0) {
+      setPhotoError("Please add at least one photo.");
+      document.getElementById("photos-heading")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    if (!userId) {
+      setError("Please sign in again.");
+      return;
+    }
+
+    setSaving(true);
+    setProgress("Saving your listing…");
+    const res = await createListing({}, new FormData(e.currentTarget));
+    if (res.error || !res.id) {
+      setError(res.error ?? "We couldn’t save your listing. Please try again.");
+      setSaving(false);
+      setProgress("");
+      return;
+    }
+
+    const problem = await uploadPhotos(
+      staged.map((s) => s.file),
+      res.id,
+      userId,
+      (done, total) => setProgress(`Uploading photo ${Math.min(done + 1, total)} of ${total}…`)
+    );
+    router.push(`/dashboard/listings/${res.id}?new=1${problem ? "&photoproblem=1" : ""}`);
+  }
+
+  const busy = saving || pending;
+
   return (
-    <form action={formAction} className="space-y-6">
+    <form
+      action={editing ? formAction : undefined}
+      onSubmit={editing ? undefined : onCreate}
+      className="space-y-6"
+    >
       {listing && <input type="hidden" name="id" value={listing.id} />}
+
+      {!editing && (
+        <section>
+          <h2 id="photos-heading" className="text-xl font-bold">Photos</h2>
+          <p className="mb-3 text-sm text-green-900/70">
+            Good photos help food sell. Add up to 6. You can add or change them later too.
+          </p>
+          <PhotoPicker items={staged} onChange={setStaged} disabled={busy} error={photoError} />
+        </section>
+      )}
+
+      {!editing && <h2 className="pt-2 text-xl font-bold">Details</h2>}
 
       <div>
         <label htmlFor="title" className={label}>Title</label>
@@ -121,18 +183,18 @@ export default function ListingForm({ listing }: { listing?: ListingDefaults }) 
         )}
       </fieldset>
 
-      {state.error && (
-        <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">{state.error}</p>
+      {(error || state.error) && (
+        <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">{error || state.error}</p>
       )}
-      {state.message && (
+      {editing && state.message && (
         <p role="status" className="rounded-xl bg-green-100 p-3 text-sm text-green-900">{state.message}</p>
       )}
 
       <button
-        disabled={pending}
+        disabled={busy}
         className="w-full rounded-full bg-green-700 px-8 py-3.5 font-semibold text-white hover:bg-green-800 disabled:opacity-60 sm:w-auto"
       >
-        {pending ? "Saving…" : editing ? "Save changes" : "Save and add photos"}
+        {editing ? (pending ? "Saving…" : "Save changes") : saving ? progress : "Save listing"}
       </button>
     </form>
   );
